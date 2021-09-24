@@ -1,5 +1,6 @@
 #  coding: utf-8 
 import socketserver
+import os
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -31,8 +32,68 @@ class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
         self.data = self.request.recv(1024).strip()
-        print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        # print ("Got a request of: %s\n" % self.data)
+        # self.request.sendall(bytearray("OK",'utf-8'))
+
+        request_data = self.data.decode('utf-8')
+        request_method = request_data.split()[0]
+        request_uri = request_data.split()[1]
+
+        response = self.handle_response(request_method, request_uri)
+        self.request.sendall(bytearray(response,'utf-8'))
+
+    def handle_response(self, method, uri):
+        path = "./www" + uri
+        # 1. Methods we cant handle
+        if method != "GET":
+            return self.code_405()
+        # 2. Wrong path ending
+        elif path[-1] != "/":
+            if os.path.isdir(path):
+                path += "/"
+                return self.code_301(path)
+            else:
+                return self.code_404()
+        # 3. Correct path
+        else:
+            path += "index.html"
+            content = self.get_content(path)
+            if content == None:
+                return self.code_404()
+            else:
+                return self.code_200(path, content)
+
+    def code_200(self, uri, body):
+        header = "HTTP/1.1 200 OK\r\n"
+        response = header + body
+        return response
+
+    def code_301(self, uri):
+        header = "HTTP/1.1 301 Moved Permanently\r\n"
+        body = "Location: " + uri
+        response = header + body
+        return response
+
+    def code_404(self):
+        header = "HTTP/1.1 404 Not Found\r\n"
+        body = "404 Not Found\r\n"
+        response = header + body
+        return response
+
+    def code_405(self):
+        header = "HTTP/1.1 405 Method Not Allowed\r\n"
+        body = "Method Not Allowed\r\n"
+        response = header + body
+        return response
+
+    def get_content(self, path):
+        try:
+            file = open(path, "r")
+            content = file.read()
+            return content
+        except:
+            return
+
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
